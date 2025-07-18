@@ -1,0 +1,75 @@
+% colormap_by_20ROIs_HSVsorted_Vfilter.m
+% Extract top 20 colors from each of 20 ROIs, filter by HSV Value ≥ 0.5, and sort by Hue
+
+%% 1. Load image
+[filename, pathname] = uigetfile({'*.jpg;*.png;*.tif'}, 'Select an image');
+if isequal(filename, 0)
+    disp('File selection cancelled.');
+    return;
+end
+img = imread(fullfile(pathname, filename));
+
+%% 2. Apply Gaussian blur
+sigma = 1;
+imgFiltered = imgaussfilt(img, sigma);
+
+%% 3. Select ROIs
+imshow(imgFiltered);
+title('Please select 20 polygonal ROIs');
+numROIs = 30;
+colorsPerROI = 30;
+roiTopRGB = [];
+
+%% 4. Extract top N colors from each ROI
+for i = 1:numROIs
+    disp(['Selecting patch ', num2str(i), '...']);
+    h = impoly();
+    wait(h);
+    mask = createMask(h);
+
+    roiPixels = reshape(imgFiltered, [], 3);
+    roiPixels = roiPixels(mask(:), :);
+
+    % Filter by HSV Value (keep only bright pixels)
+    hsv = rgb2hsv(double(roiPixels) / 255);
+    roiPixels = roiPixels(hsv(:,3) >= 0.5, :);
+
+    % Count unique RGB colors
+    [uniqueRGB, ~, idx] = unique(roiPixels, 'rows');
+    counts = accumarray(idx, 1);
+    [~, sortIdx] = sort(counts, 'descend');
+
+    topK = min(colorsPerROI, size(uniqueRGB, 1));
+    topRGB = uniqueRGB(sortIdx(1:topK), :);
+    roiTopRGB = [roiTopRGB; topRGB];
+end
+
+%% 5. Sort all collected colors by Hue in HSV space
+topRGB = roiTopRGB(1:min(400, size(roiTopRGB,1)), :);
+hsv = rgb2hsv(double(topRGB) / 255);
+[~, hueSortIdx] = sort(hsv(:,1));  % Ascending Hue sort
+
+topRGB_sorted = topRGB(hueSortIdx, :);
+customColormap = double(topRGB_sorted) / 255;
+
+%% 6. Save results
+save('custom_colormap.mat', 'customColormap');
+writematrix(customColormap, 'custom_colormap.csv');
+
+header = {'R','G','B'};
+csvwrite_with_headers('top400_RGB_raw_sorted.csv', topRGB_sorted, header);
+
+%% 7. Visualize the colormap
+figure;
+imagesc(reshape(1:size(customColormap,1), [20, ceil(size(customColormap,1)/20)]));
+colormap(customColormap);
+colorbar;
+title('Custom Colormap (HSV sorted, V ≥ 0.5)');
+
+%% 8. Helper function to save CSV with headers
+function csvwrite_with_headers(filename, data, headers)
+    fid = fopen(filename, 'w');
+    fprintf(fid, '%s,%s,%s\n', headers{:});
+    fclose(fid);
+    dlmwrite(filename, data, '-append');
+end
