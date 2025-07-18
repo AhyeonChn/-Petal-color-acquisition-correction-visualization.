@@ -1,0 +1,49 @@
+%% 1. Load image file
+filename = input('Enter the image file name (e.g., sample_image.tif): ', 's');
+img = imread(filename);
+
+%% 2. Display original image (without blur)
+imshow(img);
+title('Select 6 color patches as rectangles (Left→Right, Top→Bottom order)');
+
+%% 3. Manually define color patch ROIs and measure average RGB
+patchRects = cell(1, 6);
+measuredRGB = zeros(6, 3);
+
+for i = 1:6
+    disp(['Selecting patch ', num2str(i), '...']);
+    patchRects{i} = getrect();  % Define rectangle with mouse
+    rect = round(patchRects{i});
+    roi = img(rect(2):(rect(2)+rect(4)), rect(1):(rect(1)+rect(3)), :);
+    roiReshaped = reshape(double(roi), [], 3);  % N x 3
+    measuredRGB(i, :) = mean(roiReshaped, 1);
+end
+
+%% 4. Define target reference RGB values (user-defined 6 colors)
+referenceRGB = [
+    195, 219, 240;
+    238, 151, 203;
+    206, 178, 240;
+     44,  76, 207;
+    181,  42,  60;
+     52,  34, 141
+];
+
+%% 5. Compute color correction matrix
+T = measuredRGB \ referenceRGB;
+
+%% 6. Apply correction matrix to the entire image
+imgDouble = double(img);
+imgReshaped = reshape(imgDouble, [], 3);   % Nx3
+imgCorrected = imgReshaped * T;
+imgCorrected = reshape(imgCorrected, size(img));
+imgCorrected = uint8(min(max(imgCorrected, 0), 255));  % Clamp to 0~255
+
+%% 7. Display and save corrected image
+figure;
+imshow(imgCorrected);
+title('Color Corrected Image (No Blur)');
+
+outputFilename = ['corrected_noblur_' filename];
+imwrite(imgCorrected, outputFilename);
+disp(['Corrected image has been saved: ', outputFilename]);
